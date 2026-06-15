@@ -6,7 +6,7 @@ import unicodedata
 import hashlib
 
 # --- CONFIGURACIÓN DE SEGURIDAD ---
-# Cambia esto por tu propia palabra secreta. ¡No la compartas!
+# ¡CAMBIA ESTA PALABRA POR LA TUYA!
 PALABRA_SECRETA_MAESTRA = "MI_CLAVE_SUPER_SECRETA_123"
 
 # --- LÓGICA DEL MOTOR DE CIFRADO ---
@@ -15,13 +15,11 @@ def normalizar_texto(texto):
     return "".join([c for c in nfkd_form if not unicodedata.combining(c)]).upper()
 
 def obtener_matriz(fecha_str):
-    # Combinamos fecha y palabra secreta para crear una semilla única y enorme
     semilla_combinada = f"{fecha_str}{PALABRA_SECRETA_MAESTRA}".encode()
     semilla_hash = int(hashlib.sha256(semilla_combinada).hexdigest(), 16) % (2**32)
     
     np.random.seed(semilla_hash)
     matriz = np.random.rand(3, 3)
-    # Ortogonalización para asegurar una rotación geométrica válida
     q, r = np.linalg.qr(matriz)
     return q
 
@@ -58,16 +56,12 @@ st.title("Cifrado Enigma")
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 
-# Pantalla de Login
 if not st.session_state.autenticado:
     password = st.text_input("Introduzca la palabra secreta:", type="password")
     if st.button("Acceder"):
         if normalizar_texto(password) == "MAQUINA":
-            st.write("Encendiendo rotores de la máquina enigma...")
-            progress_bar = st.progress(0)
-            for i in range(100):
-                time.sleep(0.03)
-                progress_bar.progress(i + 1)
+            with st.spinner("Encendiendo rotores..."):
+                time.sleep(2)
             st.session_state.autenticado = True
             st.rerun()
         else:
@@ -89,9 +83,10 @@ else:
             fecha_str = fecha_cifrar.strftime("%d%m%Y")
             try:
                 res = procesar_mensaje(msg_cifrar, fecha_str, 'cifrar')
-                st.text_area("Resultado cifrado:", value=res, height=150, disabled=True)
+                # Campo optimizado para copiar
+                st.text_area("Resultado cifrado:", value=res, height=150, help="Copia este texto para compartirlo de forma segura.")
             except:
-                st.error("Error al cifrar.")
+                st.error("Error al cifrar. Verifica los datos.")
             
     with col2:
         st.subheader("Descifrar Mensaje")
@@ -101,6 +96,6 @@ else:
             fecha_str = fecha_descifrar.strftime("%d%m%Y")
             try:
                 res = procesar_mensaje(msg_descifrar, fecha_str, 'descifrar')
-                st.text_area("Resultado original:", value=res, height=150, disabled=True)
+                st.text_area("Resultado original:", value=res, height=150, help="Aquí tienes el mensaje descifrado.")
             except:
-                st.error("Error: Verifique la fecha y el mensaje.")
+                st.error("Error: Verifica la fecha o el mensaje.")
