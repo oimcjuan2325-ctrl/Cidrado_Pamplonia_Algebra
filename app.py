@@ -1,101 +1,55 @@
 import streamlit as st
-import numpy as np
-import base64
-import time
-import unicodedata
 import hashlib
 
-# --- CONFIGURACIÓN DE SEGURIDAD ---
-# ¡CAMBIA ESTA PALABRA POR LA TUYA!
-PALABRA_SECRETA_MAESTRA = "MI_CLAVE_SUPER_SECRETA_123"
+# --- CONFIGURACIÓN ---
+ALFABETO = "abcdefghijklmnñopqrstuvwxyz"
 
-# --- LÓGICA DEL MOTOR DE CIFRADO ---
-def normalizar_texto(texto):
-    nfkd_form = unicodedata.normalize('NFKD', texto)
-    return "".join([c for c in nfkd_form if not unicodedata.combining(c)]).upper()
+def obtener_llave(palabra_secreta):
+    # Genera una llave de 64 caracteres hex que actúa como semilla
+    return hashlib.sha256(palabra_secreta.encode()).hexdigest()
 
-def obtener_matriz(fecha_str):
-    semilla_combinada = f"{fecha_str}{PALABRA_SECRETA_MAESTRA}".encode()
-    semilla_hash = int(hashlib.sha256(semilla_combinada).hexdigest(), 16) % (2**32)
+def cifrar(mensaje, clave_secreta):
+    clave = obtener_llave(clave_secreta)
+    resultado = ""
+    # Limpiamos el mensaje: quitamos espacios y dejamos solo letras
+    mensaje = "".join([c for c in mensaje.lower() if c in ALFABETO])
     
-    np.random.seed(semilla_hash)
-    matriz = np.random.rand(3, 3)
-    q, r = np.linalg.qr(matriz)
-    return q
+    for i in range(len(mensaje)):
+        m_idx = ALFABETO.index(mensaje[i])
+        k_idx = int(clave[i % len(clave)], 16) % 27
+        resultado += ALFABETO[(m_idx + k_idx) % 27]
+    return resultado
 
-def procesar_mensaje(mensaje, fecha_str, modo='cifrar'):
-    matriz = obtener_matriz(fecha_str)
-    estado = np.array([0.0, 0.0, 0.0])
-    resultado = []
-    
-    if modo == 'descifrar':
-        matriz = matriz.T
-        datos = np.frombuffer(base64.urlsafe_b64decode(mensaje.encode() + b'=='), dtype=np.float64).reshape(-1, 3)
-    else:
-        datos = np.array([[ord(c), i, 0] for i, c in enumerate(mensaje)])
+def descifrar(mensaje_cifrado, clave_secreta):
+    clave = obtener_llave(clave_secreta)
+    resultado = ""
+    for i in range(len(mensaje_cifrado)):
+        c_idx = ALFABETO.index(mensaje_cifrado[i].lower())
+        k_idx = int(clave[i % len(clave)], 16) % 27
+        # Restamos la clave y usamos el módulo para volver al valor original
+        resultado += ALFABETO[(c_idx - k_idx) % 27]
+    return resultado
 
-    for v in datos:
-        if modo == 'cifrar':
-            v_rotado = np.dot(matriz, v) + estado
-            estado = v_rotado
-            resultado.append(v_rotado)
+# --- INTERFAZ WEB (STREAMLIT) ---
+st.title("🛡️ Máquina Enigma Profesional")
+st.subheader("Cifrado basado en Base27 y SHA-256")
+
+clave_input = st.text_input("Introduce tu palabra secreta:", type="password")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    msg_cifrar = st.text_area("Mensaje a cifrar:")
+    if st.button("Cifrar"):
+        if clave_input and msg_cifrar:
+            st.success(f"Resultado: {cifrar(msg_cifrar, clave_input)}")
         else:
-            v_rotado = np.dot(matriz, (v - estado))
-            estado = v
-            resultado.append(v_rotado)
-            
-    if modo == 'cifrar':
-        return base64.urlsafe_b64encode(np.array(resultado).tobytes()).decode().rstrip("=")
-    else:
-        return "".join([chr(int(round(v[0]))) for v in resultado])
+            st.warning("Completa todos los campos.")
 
-# --- INTERFAZ WEB ---
-st.set_page_config(page_title="Máquina Enigma", layout="wide")
-st.title("Cifrado Enigma")
-
-if "autenticado" not in st.session_state:
-    st.session_state.autenticado = False
-
-if not st.session_state.autenticado:
-    password = st.text_input("Introduzca la palabra secreta:", type="password")
-    if st.button("Acceder"):
-        if normalizar_texto(password) == "MAQUINA":
-            with st.spinner("Encendiendo rotores..."):
-                time.sleep(2)
-            st.session_state.autenticado = True
-            st.rerun()
+with col2:
+    msg_descifrar = st.text_area("Mensaje a descifrar:")
+    if st.button("Descifrar"):
+        if clave_input and msg_descifrar:
+            st.info(f"Mensaje original: {descifrar(msg_descifrar, clave_input)}")
         else:
-            st.error("Acceso denegado.")
-else:
-    if st.sidebar.button("Cerrar Sesión"):
-        st.session_state.autenticado = False
-        st.rerun()
-
-    st.header("Máquina Enigma del Cifrado de la Alianza")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Cifrar Mensaje")
-        msg_cifrar = st.text_area("Mensaje a cifrar:", height=150)
-        fecha_cifrar = st.date_input("Fecha de cifrado:")
-        if st.button("Cifrar ahora"):
-            fecha_str = fecha_cifrar.strftime("%d%m%Y")
-            try:
-                res = procesar_mensaje(msg_cifrar, fecha_str, 'cifrar')
-                # Campo optimizado para copiar
-                st.text_area("Resultado cifrado:", value=res, height=150, help="Copia este texto para compartirlo de forma segura.")
-            except:
-                st.error("Error al cifrar. Verifica los datos.")
-            
-    with col2:
-        st.subheader("Descifrar Mensaje")
-        msg_descifrar = st.text_area("Mensaje a descifrar:", height=150)
-        fecha_descifrar = st.date_input("Fecha de creación original:")
-        if st.button("Descifrar ahora"):
-            fecha_str = fecha_descifrar.strftime("%d%m%Y")
-            try:
-                res = procesar_mensaje(msg_descifrar, fecha_str, 'descifrar')
-                st.text_area("Resultado original:", value=res, height=150, help="Aquí tienes el mensaje descifrado.")
-            except:
-                st.error("Error: Verifica la fecha o el mensaje.")
+            st.warning("Completa todos los campos.")
